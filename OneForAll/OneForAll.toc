@@ -5,7 +5,7 @@
 ## X-License: GPL-3.0-or-later
 ## Version: 6.1.6
 ## IconTexture: Interface\AddOns\OneForAll\Assets\minimap_icon
-## OptionalDeps: Baganator
+## OptionalDeps: Baganator, Titan, TitanClassic
 ## SavedVariables: OneForAllDB, ForeverCompanionDB, ForeverLibraryTrackerDB
 ## SavedVariablesPerCharacter: OneForAllCharDB, ForeverCompanionCharDB
 

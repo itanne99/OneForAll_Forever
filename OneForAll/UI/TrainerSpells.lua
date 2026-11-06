@@ -171,17 +171,22 @@ function FLT.PrintTrainerDebug()
   for i = 1, math.min(12, #trainerRaw) do say("  " .. table.concat(trainerRaw[i], " | ")) end
 end
 
+local updateLDB
 local ev = CreateFrame("Frame")
 -- not every event exists in every client (e.g. LEARNED_SPELL_IN_TAB is missing in Forever)
 for _, e in ipairs({ "PLAYER_LOGIN", "TRAINER_SHOW", "TRAINER_UPDATE", "SPELLS_CHANGED", "LEARNED_SPELL_IN_TAB", "PLAYER_LEVEL_UP" }) do
   pcall(ev.RegisterEvent, ev, e)
 end
 local function onEventSafe(_, event)
-  if event == "PLAYER_LOGIN" then FLT.ApplyRecipeLearnLevels()
-  elseif event == "TRAINER_SHOW" or event == "TRAINER_UPDATE" then readTrainer(event == "TRAINER_SHOW")
+  if event == "PLAYER_LOGIN" then
+    FLT.ApplyRecipeLearnLevels()
+    if FLT.InitTrainerLDB then FLT.InitTrainerLDB() end
+  elseif event == "TRAINER_SHOW" or event == "TRAINER_UPDATE" then
+    readTrainer(event == "TRAINER_SHOW")
   elseif FLT.RefreshTrainerSpells then
     if C_Timer and C_Timer.After then C_Timer.After(0.3, FLT.RefreshTrainerSpells) else FLT.RefreshTrainerSpells() end
   end
+  if updateLDB then updateLDB() end
 end
 ev:SetScript("OnEvent", function(...) FLT.SafeCall("Trainer", onEventSafe, ...) end)
 
@@ -222,6 +227,90 @@ local function spellList(cid)
 end
 FLT._trainerMissing = function() return spellList(myClass) end -- test hook
 FLT._trainerMode = function(m) viewMode = m end -- test hook
+
+local ldbObj
+updateLDB = function()
+  if not ldbObj then return end
+  local list, level = spellList(myClass)
+  local now, nextLvl, nextSpells = {}, nil, {}
+  for _, s in ipairs(list or {}) do
+    local lvl = s[1]
+    if lvl <= level then
+      now[#now + 1] = s
+    elseif not nextLvl or lvl == nextLvl then
+      nextLvl = lvl
+      nextSpells[#nextSpells + 1] = s
+    end
+  end
+  if #now > 0 then
+    ldbObj.text = string.format("|cffffd200OFA Trainer:|r %d now", #now)
+  elseif nextLvl then
+    ldbObj.text = string.format("|cffffd200OFA Trainer:|r Lvl %d (%s%s)", nextLvl, nextSpells[1][3], #nextSpells > 1 and (" +" .. (#nextSpells - 1)) or "")
+  else
+    ldbObj.text = "|cffffd200OFA Trainer:|r None"
+  end
+end
+
+local function initLDB()
+  if ldbObj then return end
+  local ldb = LibStub and LibStub:GetLibrary("LibDataBroker-1.1", true)
+  if not ldb then return end
+  ldbObj = ldb:NewDataObject("OFA - Trainer", {
+    type = "data source",
+    text = "|cffffd200OFA Trainer:|r ...",
+    icon = "Interface\\Icons\\INV_Misc_Book_09",
+    OnClick = function(_, btn)
+      if (btn == "LeftButton" or not btn) and FLT.ToggleTrainerSpells then
+        FLT.ToggleTrainerSpells()
+      end
+    end,
+    OnTooltipShow = function(tt)
+      if not tt or not tt.AddLine then return end
+      local list, level = spellList(myClass)
+      tt:AddLine("OFA Trainer", 1, 0.82, 0)
+      local now, nextLvl, nextSpells = {}, nil, {}
+      for _, s in ipairs(list or {}) do
+        local lvl = s[1]
+        if lvl <= level then
+          now[#now + 1] = s
+        elseif not nextLvl or lvl == nextLvl then
+          nextLvl = lvl
+          nextSpells[#nextSpells + 1] = s
+        end
+      end
+      if #now > 0 then
+        tt:AddLine(" ")
+        tt:AddLine("Available now (Level " .. level .. "):", 0.45, 1, 0.5)
+        for _, s in ipairs(now) do
+          local name, rank, cost, quest = s[3], s[4], s[5], s[7]
+          local r = rank > 0 and (" Rank " .. rank) or ""
+          local c = quest and "|cffffd200Quest|r" or (cost and money(cost) or "|cff9d9d9d?|r")
+          tt:AddDoubleLine(name .. r, c, 1, 1, 1, 1, 0.82, 0)
+        end
+      end
+      if nextLvl then
+        tt:AddLine(" ")
+        tt:AddLine("Next at Level " .. nextLvl .. ":", 1, 0.84, 0.3)
+        for _, s in ipairs(nextSpells) do
+          local name, rank, cost, quest = s[3], s[4], s[5], s[7]
+          local r = rank > 0 and (" Rank " .. rank) or ""
+          local c = quest and "|cffffd200Quest|r" or (cost and money(cost) or "|cff9d9d9d?|r")
+          tt:AddDoubleLine(name .. r, c, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8)
+        end
+      end
+      if #now == 0 and not nextLvl then
+        tt:AddLine(" ")
+        tt:AddLine("Nothing left to learn up to level 60.", 0.7, 0.7, 0.7)
+      end
+      tt:AddLine(" ")
+      tt:AddLine("Click to open Trainer Spells", 0.5, 0.5, 0.5)
+    end,
+  })
+  updateLDB()
+end
+FLT.InitTrainerLDB = initLDB
+FLT.UpdateTrainerLDB = updateLDB
+initLDB()
 
 local frame
 local ROW_W = 412

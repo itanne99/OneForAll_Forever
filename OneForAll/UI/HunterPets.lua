@@ -1086,3 +1086,66 @@ local function createPetsPanel(parent)
 end
 
 UI.RegisterPanel({ key="pets", label="Hunter Pets", order=7, tabWidth=122, create=createPetsPanel })
+
+-- Titan Panel / LDB integration (Hunter only)
+local _, playerClass = UnitClass("player")
+if playerClass == "HUNTER" then
+  local ldbPets
+  local function updatePetsLDB()
+    if not ldbPets then return end
+    if not UnitExists or not UnitExists("pet") then
+      ldbPets.text = "|cffffd200OFA Pet:|r No Pet"
+      return
+    end
+    local name = UnitName("pet") or "Pet"
+    local level = UnitLevel("pet") or 0
+    ldbPets.text = string.format("|cffffd200OFA Pet:|r %s (%d)", name, level)
+  end
+
+  local function initPetsLDB()
+    if ldbPets then return end
+    local ldb = LibStub and LibStub:GetLibrary("LibDataBroker-1.1", true)
+    if not ldb then return end
+    ldbPets = ldb:NewDataObject("OFA - Pet", {
+      type = "data source",
+      text = "|cffffd200OFA Pet:|r ...",
+      icon = "Interface\\Icons\\Ability_Hunter_Pet_Cat",
+      OnClick = function(_, btn)
+        if (btn == "LeftButton" or not btn) and FLT.OpenPanel then
+          FLT:OpenPanel("pets")
+        end
+      end,
+      OnTooltipShow = function(tt)
+        if not tt or not tt.AddLine then return end
+        tt:AddLine("OFA Pet", 1, 0.82, 0)
+        if not UnitExists or not UnitExists("pet") then
+          tt:AddLine("No active pet summoned.", 0.7, 0.7, 0.7)
+        else
+          local name = UnitName("pet") or "Pet"
+          local level = UnitLevel("pet") or 0
+          local fam = UnitCreatureFamily and UnitCreatureFamily("pet")
+          local hap = (GetPetHappiness and GetPetHappiness()) or 0
+          local hapText = hap == 3 and "|cff59ff73Happy|r" or (hap == 2 and "|cffffd200Content|r" or "|cffff4040Unhappy|r")
+          local tp = (GetPetTrainingPoints and select(1, GetPetTrainingPoints())) or 0
+          tt:AddDoubleLine("Name:", name, 1, 1, 1, 1, 0.82, 0)
+          tt:AddDoubleLine("Level / Family:", string.format("%d  %s", level, fam or ""), 1, 1, 1, 1, 1, 1)
+          tt:AddDoubleLine("Happiness:", hapText, 1, 1, 1, 1, 1, 1)
+          tt:AddDoubleLine("Training Points:", tostring(tp), 1, 1, 1, 1, 1, 1)
+        end
+        tt:AddLine(" ")
+        tt:AddLine("Click to open Hunter Pets", 0.5, 0.5, 0.5)
+      end,
+    })
+    updatePetsLDB()
+  end
+
+  local evPets = CreateFrame("Frame")
+  for _, e in ipairs({ "PLAYER_LOGIN", "UNIT_PET", "UNIT_HAPPINESS", "PET_UI_UPDATE" }) do
+    pcall(evPets.RegisterEvent, evPets, e)
+  end
+  evPets:SetScript("OnEvent", function(_, event)
+    if event == "PLAYER_LOGIN" then initPetsLDB() end
+    updatePetsLDB()
+  end)
+  initPetsLDB()
+end

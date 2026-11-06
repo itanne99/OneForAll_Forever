@@ -1066,3 +1066,56 @@ end
 FLT.UI.RegisterPanel({ key="talents", label="Talent Trees", order=5, tabWidth=132,
   create=function(parent) return FLT:CreateTalentPlannerPanel(parent) end })
 
+-- Titan Panel / LDB integration
+local ldbTalents
+local function updateTalentsLDB()
+  if not ldbTalents then return end
+  local unspent = (GetUnspentTalentPoints and GetUnspentTalentPoints()) or 0
+  local pts = FLT.TalentPointsPerTree and FLT.TalentPointsPerTree()
+  if unspent > 0 then
+    ldbTalents.text = string.format("|cffffd200OFA Talents:|r %d unspent", unspent)
+  elseif pts then
+    ldbTalents.text = string.format("|cffffd200OFA Talents:|r %d/%d/%d", pts[1] or 0, pts[2] or 0, pts[3] or 0)
+  else
+    ldbTalents.text = "|cffffd200OFA Talents:|r Ready"
+  end
+end
+
+local function initTalentsLDB()
+  if ldbTalents then return end
+  local ldb = LibStub and LibStub:GetLibrary("LibDataBroker-1.1", true)
+  if not ldb then return end
+  ldbTalents = ldb:NewDataObject("OFA - Talents", {
+    type = "data source",
+    text = "|cffffd200OFA Talents:|r ...",
+    icon = "Interface\\Icons\\Ability_Marksmanship",
+    OnClick = function(_, btn)
+      if (btn == "LeftButton" or not btn) and FLT.OpenPanel then
+        FLT:OpenPanel("talents")
+      end
+    end,
+    OnTooltipShow = function(tt)
+      if not tt or not tt.AddLine then return end
+      local unspent = (GetUnspentTalentPoints and GetUnspentTalentPoints()) or 0
+      local pts = FLT.TalentPointsPerTree and FLT.TalentPointsPerTree()
+      tt:AddLine("OFA Talents", 1, 0.82, 0)
+      tt:AddDoubleLine("Unspent points:", tostring(unspent), 1, 1, 1, unspent > 0 and 0.45 or 1, unspent > 0 and 1 or 1, unspent > 0 and 0.5 or 1)
+      if pts then
+        tt:AddDoubleLine("Distribution:", string.format("%d / %d / %d", pts[1] or 0, pts[2] or 0, pts[3] or 0), 1, 1, 1, 1, 0.82, 0)
+      end
+      tt:AddLine(" ")
+      tt:AddLine("Click to open Talent Trees", 0.5, 0.5, 0.5)
+    end,
+  })
+  updateTalentsLDB()
+end
+
+local evTalents = CreateFrame("Frame")
+for _, e in ipairs({ "PLAYER_LOGIN", "CHARACTER_POINTS_CHANGED", "PLAYER_TALENT_UPDATE", "PLAYER_ENTERING_WORLD" }) do
+  pcall(evTalents.RegisterEvent, evTalents, e)
+end
+evTalents:SetScript("OnEvent", function(_, event)
+  if event == "PLAYER_LOGIN" then initTalentsLDB() end
+  updateTalentsLDB()
+end)
+initTalentsLDB()

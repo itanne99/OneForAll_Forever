@@ -367,3 +367,49 @@ local function createBooksPanel(frame)
 end
 
 UI.RegisterPanel({ key="books", label="Library Books", order=6, tabWidth=132, create=createBooksPanel })
+
+-- Titan Panel / LDB integration
+local ldbBooks
+local function updateBooksLDB()
+  if not ldbBooks then return end
+  local done, owned = (FLT.GetCounts and FLT:GetCounts()) or 0, 0
+  local total = (FLT.BOOKS and #FLT.BOOKS) or 48
+  ldbBooks.text = string.format("|cffffd200OFA Books:|r %d/%d", done, total)
+end
+
+local function initBooksLDB()
+  if ldbBooks then return end
+  local ldb = LibStub and LibStub:GetLibrary("LibDataBroker-1.1", true)
+  if not ldb then return end
+  ldbBooks = ldb:NewDataObject("OFA - Books", {
+    type = "data source",
+    text = "|cffffd200OFA Books:|r ...",
+    icon = "Interface\\Icons\\INV_Misc_Book_06",
+    OnClick = function(_, btn)
+      if (btn == "LeftButton" or not btn) and FLT.OpenPanel then
+        FLT:OpenPanel("books")
+      end
+    end,
+    OnTooltipShow = function(tt)
+      if not tt or not tt.AddLine then return end
+      local done, owned = (FLT.GetCounts and FLT:GetCounts()) or 0, 0
+      local total = (FLT.BOOKS and #FLT.BOOKS) or 48
+      tt:AddLine("OFA Books", 1, 0.82, 0)
+      tt:AddDoubleLine("Turned in:", string.format("%d / %d", done, total), 1, 1, 1, 0.45, 1, 0.5)
+      tt:AddDoubleLine("Owned or turned in:", string.format("%d / %d", owned, total), 1, 1, 1, 1, 0.82, 0)
+      tt:AddLine(" ")
+      tt:AddLine("Click to open Library Books", 0.5, 0.5, 0.5)
+    end,
+  })
+  updateBooksLDB()
+end
+
+local evBooks = CreateFrame("Frame")
+for _, e in ipairs({ "PLAYER_LOGIN", "BAG_UPDATE", "QUEST_TURNED_IN", "QUEST_LOG_UPDATE" }) do
+  pcall(evBooks.RegisterEvent, evBooks, e)
+end
+evBooks:SetScript("OnEvent", function(_, event)
+  if event == "PLAYER_LOGIN" then initBooksLDB() end
+  updateBooksLDB()
+end)
+initBooksLDB()

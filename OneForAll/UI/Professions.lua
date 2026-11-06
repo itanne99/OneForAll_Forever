@@ -864,3 +864,90 @@ end
 
 
 UI.RegisterPanel({ key="professions", label="Professions", order=3, tabWidth=132, create=createProfessionPanel })
+
+-- Titan Panel / LDB integration
+local ldbProfs
+local function getLDBProfessions()
+  local out, seen = {}, {}
+  local function add(name, rank, maxRank)
+    if name and not seen[name] then seen[name] = true; out[#out + 1] = { name = name, rank = tonumber(rank) or 0, max = tonumber(maxRank) or 0 } end
+  end
+  if GetProfessions and GetProfessionInfo then
+    local list = { GetProfessions() }
+    for k = 1, 6 do
+      if list[k] then
+        local ok, name, _, rank, maxRank = pcall(GetProfessionInfo, list[k])
+        if ok and name then add(name, rank, maxRank) end
+      end
+    end
+  end
+  if GetNumSkillLines and GetSkillLineInfo then
+    for i = 1, GetNumSkillLines() or 0 do
+      local name, isHeader, _, rank, _, _, maxRank = GetSkillLineInfo(i)
+      if not isHeader and name and FLT.PROFESSION_DATA and FLT.PROFESSION_DATA[name] then
+        add(name, rank, maxRank)
+      end
+    end
+  end
+  if type(OneForAllCharDB) == "table" and type(OneForAllCharDB.professions) == "table" then
+    for name, p in pairs(OneForAllCharDB.professions) do
+      if p.skill then add(name, p.skill, p.maxSkill) end
+    end
+  end
+  return out
+end
+
+local function updateProfessionsLDB()
+  if not ldbProfs then return end
+  local profs = getLDBProfessions()
+  if #profs == 0 then
+    ldbProfs.text = "|cffffd200OFA Profs:|r None"
+  else
+    local parts = {}
+    for i = 1, math.min(2, #profs) do
+      parts[#parts + 1] = string.format("%s %d", profs[i].name:sub(1, 4), profs[i].rank)
+    end
+    ldbProfs.text = string.format("|cffffd200OFA Profs:|r %s", table.concat(parts, ", "))
+  end
+end
+
+local function initProfessionsLDB()
+  if ldbProfs then return end
+  local ldb = LibStub and LibStub:GetLibrary("LibDataBroker-1.1", true)
+  if not ldb then return end
+  ldbProfs = ldb:NewDataObject("OFA - Professions", {
+    type = "data source",
+    text = "|cffffd200OFA Profs:|r ...",
+    icon = "Interface\\Icons\\Trade_BlackSmithing",
+    OnClick = function(_, btn)
+      if (btn == "LeftButton" or not btn) and FLT.OpenPanel then
+        FLT:OpenPanel("professions")
+      end
+    end,
+    OnTooltipShow = function(tt)
+      if not tt or not tt.AddLine then return end
+      local profs = getLDBProfessions()
+      tt:AddLine("OFA Professions", 1, 0.82, 0)
+      if #profs == 0 then
+        tt:AddLine("No professions found.", 0.7, 0.7, 0.7)
+      else
+        for _, p in ipairs(profs) do
+          tt:AddDoubleLine(p.name, string.format("%d / %d", p.rank, p.max), 1, 1, 1, 1, 0.82, 0)
+        end
+      end
+      tt:AddLine(" ")
+      tt:AddLine("Click to open Professions", 0.5, 0.5, 0.5)
+    end,
+  })
+  updateProfessionsLDB()
+end
+
+local evProfs = CreateFrame("Frame")
+for _, e in ipairs({ "PLAYER_LOGIN", "SKILL_LINES_CHANGED", "CHAT_MSG_SKILL" }) do
+  pcall(evProfs.RegisterEvent, evProfs, e)
+end
+evProfs:SetScript("OnEvent", function(_, event)
+  if event == "PLAYER_LOGIN" then initProfessionsLDB() end
+  updateProfessionsLDB()
+end)
+initProfessionsLDB()
